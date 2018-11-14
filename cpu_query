@@ -1,0 +1,14 @@
+(index="inception-snmp-push" source="snmp://*.tpa1.tivo.com/*-ss") 
+| rex field=source "snmp://(?<hostName>[^/]+)/(?<service>(?<env>[^\.]+)\.(?<dc>[^-]+))-(?<metric>.*)" 
+| search hostName="*.tpa1.tivo.com" 
+| stats last(ssCpuRawIdle) as ssCpuRawIdle last(ssCpuRawKernel) as ssCpuRawKernel last(ssCpuRawSystem) as ssCpuRawSystem last(ssCpuRawUser) as ssCpuRawUser last(ssCpuRawWait) as ssCpuRawWait last(ssCpuRawNice) as ssCpuRawNice last(ssCpuRawInterrupt) as ssCpuRawInterrupt last(ssCpuRawSoftIRQ) as ssCpuRawSoftIRQ last(ssCpuRawSteal) as ssCpuRawSteal by _time,hostName
+| streamstats current=f global=f window=1 last(_time) as lasttime last(ssCpuRawIdle) as lastssCpuRawIdle last(ssCpuRawKernel) as lastssCpuRawKernel last(ssCpuRawSystem) as lastssCpuRawSystem last(ssCpuRawUser) as lastssCpuRawUser last(ssCpuRawWait) as lastssCpuRawWait last(ssCpuRawNice) as lastssCpuRawNice last(ssCpuRawInterrupt) as lastssCpuRawInterrupt last(ssCpuRawSoftIRQ) as lastssCpuRawSoftIRQ last(ssCpuRawSteal) as lastssCpuRawSteal by hostName 
+| eval timediff=lasttime - '_time'
+| eval idle=((lastssCpuRawIdle - ssCpuRawIdle) / timediff), kernel=((lastssCpuRawKernel - ssCpuRawKernel) / timediff), system=((lastssCpuRawSystem - ssCpuRawSystem) / timediff), user=((lastssCpuRawUser - ssCpuRawUser) / timediff), wait=((lastssCpuRawWait - ssCpuRawWait) / timediff), nice=((lastssCpuRawNice - ssCpuRawNice) / timediff), interrupt=((lastssCpuRawInterrupt - ssCpuRawInterrupt) / timediff), irq=((lastssCpuRawSoftIRQ - ssCpuRawSoftIRQ) / timediff), steal=((lastssCpuRawSteal - ssCpuRawSteal) / timediff)
+| table _time hostName idle kernel system user wait nice interrupt irq steal timediff
+| eval cpu_tsb=(idle+nice+system+wait+irq+steal)
+| eval cpu_itsb=(idle+wait)
+| eval cpu_utsr=(cpu_tsb-cpu_itsb)
+| eval cpu_perc=round(cpu_utsr/cpu_tsb*100,2)
+| eval cpu_iowait_perc=round(wait/cpu_tsb*100,2)
+| timechart span=1m limit=0 max(cpu_perc) as CPU by hostName
